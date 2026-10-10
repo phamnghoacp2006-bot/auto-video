@@ -1,0 +1,50 @@
+name: make-video
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: Chủ đề video
+        required: true
+      row_id:
+        description: ID dòng trong Google Sheet (để Make cập nhật trạng thái)
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cài FFmpeg và font
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
+
+      - name: Cài thư viện Python
+        run: pip install edge-tts requests
+
+      - name: Tạo video
+        env:
+          TOPIC: ${{ inputs.topic }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python generate_video.py
+
+      - name: Phát hành file và báo về Make
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROW_ID: ${{ inputs.row_id }}
+          WEBHOOK: ${{ secrets.MAKE_WEBHOOK_URL }}
+        run: |
+          TAG="v-${{ github.run_id }}"
+          gh release create "$TAG" out/video.mp4 --title "$TAG" --notes "auto"
+          URL="https://github.com/${{ github.repository }}/releases/download/$TAG/video.mp4"
+          jq -n --arg url "$URL" --arg row "$ROW_ID" --slurpfile m out/meta.json \
+            '{video_url:$url,row_id:$row,title:$m[0].title,caption:$m[0].caption}' > payload.json
+          curl -sS -X POST -H "Content-Type: application/json" -d @payload.json "$WEBHOOK"
