@@ -45,6 +45,10 @@ jobs:
           TAG="v-${{ github.run_id }}"
           gh release create "$TAG" out/video.mp4 --title "$TAG" --notes "auto"
           URL="https://github.com/${{ github.repository }}/releases/download/$TAG/video.mp4"
-          jq -n --arg url "$URL" --arg row "$ROW_ID" --slurpfile m out/meta.json \
-            '{video_url:$url,row_id:$row,title:$m[0].title,caption:$m[0].caption}' > payload.json
-          curl -sS -X POST -H "Content-Type: application/json" -d @payload.json "$WEBHOOK"
+          if [ -n "$WEBHOOK" ]; then
+            jq -n --arg url "$URL" --arg row "$ROW_ID" --slurpfile m out/meta.json \
+              '{video_url:$url,row_id:$row,title:$m[0].title,caption:$m[0].caption}' > payload.json
+            curl -sS -X POST -H "Content-Type: application/json" -d @payload.json "$WEBHOOK"
+          else
+            echo "Chưa có MAKE_WEBHOOK_URL, bỏ qua bước gửi về Make. Video: $URL"
+          fi
