@@ -133,7 +133,7 @@ def main():
     sh("ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(TMP / "list.txt"),
        "-c", "copy", str(TMP / "joined.mp4"))
 
-    style = "FontName=DejaVu Sans,FontSize=11,Bold=1,Outline=2,Shadow=1,Alignment=2,MarginL=30,MarginR=30,MarginV=70"
+    style = "FontName=DejaVu Sans,FontSize=6,Bold=1,Outline=1,Shadow=1,Alignment=2,MarginL=40,MarginR=40,MarginV=60"
     sh("ffmpeg", "-y", "-i", str(TMP / "joined.mp4"),
        "-vf", f"subtitles={TMP / 'subs.srt'}:force_style='{style}'",
        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "copy",
