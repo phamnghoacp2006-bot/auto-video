@@ -80,3 +80,71 @@ def get_image(prompt, path):
         try:
             r = requests.get(url, timeout=120)
             if r.status_code == 200 and r.headers.get("content-type", "").startswith("image"):
+                path.write_bytes(r.content)
+                return
+        except requests.RequestException as e:
+            print("Ảnh lỗi:", e)
+        time.sleep(8 * (attempt + 1))
+    # dự phòng: nền màu trơn để pipeline không chết
+    sh("ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=0x1c1c28:s={W}x{H}",
+       "-frames:v", "1", str(path))
+
+
+def srt_time(t):
+    ms = int(round(t * 1000))
+    h, ms = divmod(ms, 3600000)
+    m, ms = divmod(ms, 60000)
+    s, ms = divmod(ms, 1000)
+    return f"{h:02}:{m:02}:{s:02},{ms:03}"
+
+
+def main():
+    data = make_script()
+    scenes = data["scenes"]
+    print(f"Kịch bản: {data['title']} ({len(scenes)} cảnh)")
+
+    srt, cursor, segs = [], 0.0, []
+    for i, sc in enumerate(scenes):
+        mp3 = TMP / f"a{i}.mp3"
+        img = TMP / f"i{i}.jpg"
+        seg = TMP / f"seg{i}.mp4"
+
+        asyncio.run(tts(sc["narration"], mp3))
+        dur = audio_duration(mp3) + 0.4
+        get_image(sc["image_prompt"], img)
+
+        frames = int(dur * FPS) + 1
+        # zoom chậm (Ken Burns); đổi hướng zoom xen kẽ cho đỡ đơn điệu
+        z = "min(zoom+0.0007,1.2)" if i % 2 == 0 else "if(eq(on,1),1.2,max(zoom-0.0007,1.0))"
+        vf = (f"scale=1620:2880,zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+              f":d={frames}:s={W}x{H}:fps={FPS},format=yuv420p")
+        sh("ffmpeg", "-y", "-i", str(img), "-i", str(mp3),
+           "-vf", vf, "-af", "apad", "-t", f"{dur:.2f}",
+           "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+           "-c:a", "aac", "-ar", "44100", "-ac", "2", str(seg))
+
+        srt.append(f"{i + 1}\n{srt_time(cursor)} --> {srt_time(cursor + dur - 0.1)}\n{sc['narration']}\n")
+        cursor += dur
+        segs.append(seg.name)
+        print(f"Xong cảnh {i + 1}/{len(scenes)}")
+
+    (TMP / "subs.srt").write_text("\n".join(srt), encoding="utf-8")
+    (TMP / "list.txt").write_text("".join(f"file '{s}'\n" for s in segs), encoding="utf-8")
+    sh("ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(TMP / "list.txt"),
+       "-c", "copy", str(TMP / "joined.mp4"))
+
+    style = "FontName=DejaVu Sans,FontSize=11,Bold=1,Outline=2,Shadow=1,Alignment=2,MarginL=30,MarginR=30,MarginV=70"
+    sh("ffmpeg", "-y", "-i", str(TMP / "joined.mp4"),
+       "-vf", f"subtitles={TMP / 'subs.srt'}:force_style='{style}'",
+       "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "copy",
+       str(OUT / "video.mp4"))
+
+    (OUT / "meta.json").write_text(
+        json.dumps({"title": data["title"], "caption": data["caption"]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    print("Hoàn tất:", OUT / "video.mp4")
+
+
+if __name__ == "__main__":
+    main()
