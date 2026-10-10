@@ -15,7 +15,7 @@ import requests
 
 TOPIC = os.environ["TOPIC"]
 GEMINI_KEY = os.environ["GEMINI_API_KEY"]
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")  # đổi nếu Google đổi tên model
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")  # đổi nếu Google đổi tên model
 VOICE = os.environ.get("VOICE", "vi-VN-HoaiMyNeural")        # nam: vi-VN-NamMinhNeural
 W, H, FPS = 1080, 1920, 25
 
