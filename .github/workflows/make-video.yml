@@ -7,8 +7,18 @@ on:
         description: Chủ đề video
         required: true
       row_id:
-        description: ID dòng trong Google Sheet (để Make cập nhật trạng thái)
+        description: Số dòng trong Google Sheet
         required: false
+      genre:
+        description: URBAN, PSYCHOLOGICAL, FOLK, ANALOG, GOTHIC (trống = tự chọn)
+        required: false
+      voice_style:
+        description: DEEP, WHISPER, EMOTIONLESS (trống = theo thể loại)
+        required: false
+      duration_sec:
+        description: Thời lượng mong muốn (giây)
+        required: false
+        default: "90"
 
 permissions:
   contents: write
@@ -33,6 +43,9 @@ jobs:
       - name: Tạo video
         env:
           TOPIC: ${{ inputs.topic }}
+          GENRE: ${{ inputs.genre }}
+          VOICE_STYLE: ${{ inputs.voice_style }}
+          DURATION_SEC: ${{ inputs.duration_sec }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python generate_video.py
 
@@ -47,8 +60,21 @@ jobs:
           URL="https://github.com/${{ github.repository }}/releases/download/$TAG/video.mp4"
           if [ -n "$WEBHOOK" ]; then
             jq -n --arg url "$URL" --arg row "$ROW_ID" --slurpfile m out/meta.json \
-              '{video_url:$url,row_id:$row,title:$m[0].title,caption:$m[0].caption}' > payload.json
+              '{status:"Done",error_note:"",video_url:$url,row_id:$row,title:$m[0].title,caption:$m[0].caption}' > payload.json
             curl -sS -X POST -H "Content-Type: application/json" -d @payload.json "$WEBHOOK"
           else
             echo "Chưa có MAKE_WEBHOOK_URL, bỏ qua bước gửi về Make. Video: $URL"
+          fi
+
+      - name: Báo lỗi về Make
+        if: failure()
+        env:
+          ROW_ID: ${{ inputs.row_id }}
+          WEBHOOK: ${{ secrets.MAKE_WEBHOOK_URL }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -n "$WEBHOOK" ]; then
+            jq -n --arg row "$ROW_ID" --arg note "Lỗi, xem log: $RUN_URL" \
+              '{status:"Error",error_note:$note,video_url:"",row_id:$row,title:"",caption:""}' > err.json
+            curl -sS -X POST -H "Content-Type: application/json" -d @err.json "$WEBHOOK"
           fi
