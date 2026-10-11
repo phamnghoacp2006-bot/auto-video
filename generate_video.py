@@ -151,7 +151,7 @@ def make_script(genre):
         '"image_prompt": "English, one still scene, dark and atmospheric, no text, no gore, no close-up faces"}]}\n'
         f"Có khoảng {n_scenes} cảnh (từ {n_scenes - 1} đến {n_scenes + 1}), nối tiếp nhau thành một câu chuyện liền mạch."
     )
-       url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
     for attempt in range(3):
         try:
             r = requests.post(
