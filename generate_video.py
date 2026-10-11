@@ -19,12 +19,23 @@ MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")  # đổi nếu Googl
 W, H, FPS = 1080, 1920, 25
 PAUSE = 0.7  # khoảng lặng giữa các cảnh (giây)
 
+try:
+    DURATION = max(30, min(120, int(os.environ.get("DURATION_SEC") or 90)))
+except ValueError:
+    DURATION = 90
+
 OUT = pathlib.Path("out")
 TMP = pathlib.Path("tmp")
 OUT.mkdir(exist_ok=True)
 TMP.mkdir(exist_ok=True)
 
 GRADE = "eq=saturation=0.65:contrast=1.15:brightness=-0.05,vignette=PI/5"
+
+GENRE_MAP = {
+    "URBAN": "urban", "PSYCHOLOGICAL": "psychological", "FOLK": "folk",
+    "ANALOG": "analog", "GOTHIC": "gothic",
+}
+VOICE_MAP = {"DEEP": "tram", "WHISPER": "thi_tham", "EMOTIONLESS": "vo_hon"}
 
 GENRES = {
     "psychological": {
@@ -91,6 +102,9 @@ VOICE_HINTS = [("giọng trầm", "tram"), ("giọng vô hồn", "vo_hon"), ("gi
 
 
 def pick_genre():
+    forced = GENRE_MAP.get(os.environ.get("GENRE", "").strip().upper())
+    if forced:
+        return forced
     t = TOPIC.lower()
     for kw, key in KEYWORDS:
         if kw in t:
@@ -99,6 +113,9 @@ def pick_genre():
 
 
 def pick_voice(genre_key):
+    forced = VOICE_MAP.get(os.environ.get("VOICE_STYLE", "").strip().upper())
+    if forced:
+        return forced
     t = TOPIC.lower()
     for kw, key in VOICE_HINTS:
         if kw in t:
@@ -115,13 +132,15 @@ def sh(*args):
 
 
 def make_script(genre):
+    words = int(DURATION * 2.0)
+    n_scenes = max(6, round(DURATION / 7))
     prompt = (
         "Bạn là người kể chuyện kinh dị chuyên nghiệp cho kênh TikTok tiếng Việt.\n"
         f"Thể loại: {genre['name']}. {genre['desc']}\n"
         f"Ý tưởng hoặc chủ đề gợi ý: {TOPIC}\n"
-        "Viết MỘT truyện kinh dị hư cấu ngắn bằng tiếng Việt, đọc thành lời khoảng 60 đến 80 giây "
-        "(khoảng 150 đến 190 từ). Câu đầu tiên phải là câu móc hút người nghe. Câu ngắn, nhịp chậm, "
-        "căng thẳng tăng dần, kết bằng một cú twist hoặc chi tiết rợn gáy để ngỏ. "
+        f"Viết MỘT truyện kinh dị hư cấu ngắn bằng tiếng Việt, đọc thành lời khoảng {DURATION} giây "
+        f"(khoảng {words} từ, không lệch quá 15%). Câu đầu tiên phải là câu móc hút người nghe. "
+        "Câu ngắn, nhịp chậm, căng thẳng tăng dần, kết bằng một cú twist hoặc chi tiết rợn gáy để ngỏ. "
         "Kể ở ngôi thứ nhất hoặc người dẫn truyện, bối cảnh tự nhiên với khán giả Việt Nam.\n"
         "Chỉ gây sợ bằng không khí và chi tiết bất thường. KHÔNG miêu tả máu me, bạo lực chi tiết, "
         "tự hại, tình dục; không dùng người thật hoặc thảm kịch có thật.\n"
@@ -130,7 +149,7 @@ def make_script(genre):
         '"caption": "mô tả ngắn gây tò mò, ghi rõ đây là truyện hư cấu, kèm 4-6 hashtag như #kinhdi #truyenma", '
         '"scenes": [{"narration": "1-3 câu của truyện, để đọc thành lời", '
         '"image_prompt": "English, one still scene, dark and atmospheric, no text, no gore, no close-up faces"}]}\n'
-        "Có 8 đến 12 cảnh, nối tiếp nhau thành một câu chuyện liền mạch."
+        f"Có khoảng {n_scenes} cảnh (từ {n_scenes - 1} đến {n_scenes + 1}), nối tiếp nhau thành một câu chuyện liền mạch."
     )
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
     for attempt in range(3):
@@ -194,10 +213,12 @@ def main():
     genre = GENRES[genre_key]
     voice_key = pick_voice(genre_key)
     v = VOICES[voice_key]
-    print(f"Thể loại: {genre['name']} | Kiểu giọng: {voice_key}")
+    print(f"Thể loại: {genre['name']} | Kiểu giọng: {voice_key} | Thời lượng mục tiêu: {DURATION}s")
 
     data = make_script(genre)
-    scenes = data["scenes"]
+    scenes = data.get("scenes") or []
+    if not scenes:
+        raise RuntimeError("Kịch bản không có cảnh nào")
     print(f"Kịch bản: {data['title']} ({len(scenes)} cảnh)")
 
     srt, cursor, segs = [], 0.0, []
