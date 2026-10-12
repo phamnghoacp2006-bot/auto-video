@@ -230,9 +230,23 @@ def make_script(genre):
 
 
 async def tts(text, path, v):
-    comm = edge_tts.Communicate(text, v["voice"], rate=v["rate"], volume=v["volume"], pitch=v["pitch"])
-    await comm.save(str(path))
-
+    last = None
+    for attempt in range(4):
+        try:
+            comm = edge_tts.Communicate(text, v["voice"], rate=v["rate"], volume=v["volume"], pitch=v["pitch"])
+            await comm.save(str(path))
+            return
+        except Exception as e:
+            last = e
+            print(f"edge-tts lỗi (lần {attempt + 1}):", e)
+            await asyncio.sleep(15 * (attempt + 1))
+    # dự phòng: giọng gTTS (một giọng tiếng Việt cố định, kém tự nhiên hơn)
+    print("Chuyển sang giọng dự phòng gTTS")
+    try:
+        from gtts import gTTS
+    except ImportError:
+        raise last
+    gTTS(text, lang="vi").save(str(path))
 
 def audio_duration(path):
     out = sh("ffprobe", "-v", "error", "-show_entries", "format=duration",
